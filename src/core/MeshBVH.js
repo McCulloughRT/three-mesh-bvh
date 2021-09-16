@@ -138,16 +138,27 @@ export class MeshBVH {
 
 		}, options );
 
-		if ( options.useSharedArrayBuffer && typeof SharedArrayBuffer === 'undefined' ) {
+		// if ( options.useSharedArrayBuffer && typeof SharedArrayBuffer === 'undefined' ) {
 
-			throw new Error( 'MeshBVH: SharedArrayBuffer is not available.' );
+		// 	throw new Error( 'MeshBVH: SharedArrayBuffer is not available.' );
 
+		// }
+
+		// [RM] add indirectTriangleBuffer
+		this._indirectTriangleBuffer = null;
+		if (options.indirectTriangleBuffer === true) {
+			this._indirectTriangleBuffer = new Uint32Array(geometry.index.array.length / 3)
+			for (let i = 0; i < this._indirectTriangleBuffer.length; i++) {
+				this._indirectTriangleBuffer[i] = i
+			}
 		}
 
 		this._roots = null;
 		if ( ! options[ SKIP_GENERATION ] ) {
 
-			this._roots = buildPackedTree( geometry, options );
+			// [RM] pass indirectTriangleBuffer to buildTree functions
+			// this._roots = buildPackedTree( geometry, options );
+			this._roots = buildPackedTree( geometry, options, this._indirectTriangleBuffer );
 
 			if ( ! geometry.boundingBox && options.setBoundingBox ) {
 

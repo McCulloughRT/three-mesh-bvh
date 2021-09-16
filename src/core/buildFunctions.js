@@ -11,7 +11,8 @@ function ensureIndex( geo, options ) {
 	if ( ! geo.index ) {
 
 		const vertexCount = geo.attributes.position.count;
-		const BufferConstructor = options.useSharedArrayBuffer ? SharedArrayBuffer : ArrayBuffer;
+		// const BufferConstructor = options.useSharedArrayBuffer ? SharedArrayBuffer : ArrayBuffer;
+		const BufferConstructor = ArrayBuffer
 		let index;
 		if ( vertexCount > 65535 ) {
 
@@ -45,6 +46,10 @@ function ensureIndex( geo, options ) {
 //   g0 = [0, 20]  |______________________||_____________________|
 //                      g1 = [16, 40]           g2 = [41, 60]
 //
+// [start:0,count:20], {start:16,count:24}, {start:41,count:23}
+// [0,20,16,40,41,64]
+// [0,16,20,40,41,64]
+// {s:0,e:16},{s:16,e:20},{s:20,e:40},{s:40,e:41},{s:41,e:64}
 // we would need four BVH roots: [0, 15], [16, 20], [21, 40], [41, 60].
 function getRootIndexRanges( geo ) {
 
@@ -185,11 +190,39 @@ function getCentroidBounds( triangleBounds, offset, count, centroidTarget ) {
 
 }
 
+// [RM] special partition function for dealing with indirect triangle buffer:
+// function partition_indirect(triangleBuffer, triangleBounds, offset, count, split) {
+// 	let left = offset;
+// 	let right = offset + count - 1;
+// 	const pos = split.pos;
+// 	const axisOffset = split.axis * 2
+
+// 	while ( true ) {
+// 		while (left <= right && triangleBounds[ left * 6 + axisOffset ] < pos) {
+// 			left++;
+// 		}
+
+// 		while (left <= right && triangleBounds[ right * 6 + axisOffset ] >= pos) {
+// 			right--;
+// 		}
+
+// 		if (left < right) {
+// 			let t0 = triangleBuffer[left];
+// 			triangleBuffer[left] = triangleBuffer[right];
+// 			triangleBuffer[right] = t0
+
+// 			left++;
+// 			right--;
+// 		} else {
+// 			return left
+// 		}
+// 	}
+// }
 
 // reorders `tris` such that for `count` elements after `offset`, elements on the left side of the split
 // will be on the left and elements on the right side of the split will be on the right. returns the index
 // of the first element on the right side, or offset + count if there are no elements on the right side.
-function partition( index, triangleBounds, offset, count, split ) {
+function partition( index, triangleBounds, offset, count, split, indirect=false ) {
 
 	let left = offset;
 	let right = offset + count - 1;
@@ -219,19 +252,29 @@ function partition( index, triangleBounds, offset, count, split ) {
 			// left and right; that's the verts in the geometry index, the bounds,
 			// and perhaps the SAH planes
 
-			for ( let i = 0; i < 3; i ++ ) {
+			if (indirect) {
 
-				let t0 = index[ left * 3 + i ];
-				index[ left * 3 + i ] = index[ right * 3 + i ];
-				index[ right * 3 + i ] = t0;
+				let t0 = index[left];
+				index[left] = index[right];
+				index[right] = t0
 
-				let t1 = triangleBounds[ left * 6 + i * 2 + 0 ];
-				triangleBounds[ left * 6 + i * 2 + 0 ] = triangleBounds[ right * 6 + i * 2 + 0 ];
-				triangleBounds[ right * 6 + i * 2 + 0 ] = t1;
+			} else {
 
-				let t2 = triangleBounds[ left * 6 + i * 2 + 1 ];
-				triangleBounds[ left * 6 + i * 2 + 1 ] = triangleBounds[ right * 6 + i * 2 + 1 ];
-				triangleBounds[ right * 6 + i * 2 + 1 ] = t2;
+				for ( let i = 0; i < 3; i ++ ) {
+
+					let t0 = index[ left * 3 + i ];
+					index[ left * 3 + i ] = index[ right * 3 + i ];
+					index[ right * 3 + i ] = t0;
+	
+					let t1 = triangleBounds[ left * 6 + i * 2 + 0 ];
+					triangleBounds[ left * 6 + i * 2 + 0 ] = triangleBounds[ right * 6 + i * 2 + 0 ];
+					triangleBounds[ right * 6 + i * 2 + 0 ] = t1;
+	
+					let t2 = triangleBounds[ left * 6 + i * 2 + 1 ];
+					triangleBounds[ left * 6 + i * 2 + 1 ] = triangleBounds[ right * 6 + i * 2 + 1 ];
+					triangleBounds[ right * 6 + i * 2 + 1 ] = t2;
+	
+				}
 
 			}
 
@@ -511,7 +554,7 @@ function computeTriangleBounds( geo, fullBounds ) {
 
 }
 
-export function buildTree( geo, options ) {
+export function buildTree( geo, options, indirectTriangleBuffer = null ) {
 
 	// either recursively splits the given node, creating left and right subtrees for it, or makes it a leaf node,
 	// recording the offset and count of its triangles and writing them into the reordered geometry index.
@@ -548,7 +591,22 @@ export function buildTree( geo, options ) {
 
 		}
 
-		const splitOffset = partition( indexArray, triangleBounds, offset, count, split );
+		// [RM] Using indirect triangle buffer to partition:
+		// const splitOffset = partition( indexArray, triangleBounds, offset, count, split );
+		const splitOffset = partition(
+			indirectTriangleBuffer || indexArray, 
+			triangleBounds, 
+			offset, 
+			count, 
+			split, 
+			indirectTriangleBuffer != null
+		)
+		// let splitOffset
+		// if (indirectTriangleBuffer != null) {
+		// 	splitOffset = partition( indirectTriangleBuffer, triangleBounds, offset, count, split )
+		// } else {
+		// 	splitOffset = partition( indexArray, triangleBounds, offset, count, split );
+		// }
 
 		// create the two new child nodes
 		if ( splitOffset === offset || splitOffset === offset + count ) {
@@ -637,18 +695,19 @@ export const BYTES_PER_NODE = 6 * 4 + 4 + 4;
 
 export const IS_LEAFNODE_FLAG = 0xFFFF;
 
-export function buildPackedTree( geo, options ) {
+export function buildPackedTree( geo, options, indirectTriangleBuffer = null ) {
 
 	// boundingData  				: 6 float32
 	// right / offset 				: 1 uint32
 	// splitAxis / isLeaf + count 	: 1 uint32 / 2 uint16
-	const roots = buildTree( geo, options );
+	const roots = buildTree( geo, options, indirectTriangleBuffer );
 
 	let float32Array;
 	let uint32Array;
 	let uint16Array;
 	const packedRoots = [];
-	const BufferConstructor = options.useSharedArrayBuffer ? SharedArrayBuffer : ArrayBuffer;
+	// const BufferConstructor = options.useSharedArrayBuffer ? SharedArrayBuffer : ArrayBuffer;
+	const BufferConstructor = ArrayBuffer
 	for ( let i = 0; i < roots.length; i ++ ) {
 
 		const root = roots[ i ];

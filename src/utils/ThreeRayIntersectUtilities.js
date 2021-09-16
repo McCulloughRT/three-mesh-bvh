@@ -78,11 +78,20 @@ function checkBufferGeometryIntersection( ray, position, uv, a, b, c, side ) {
 
 // https://github.com/mrdoob/three.js/blob/0aa87c999fe61e216c1133fba7a95772b503eddf/src/objects/Mesh.js#L258
 function intersectTri( geo, side, ray, tri, intersections ) {
-
-	const triOffset = tri * 3;
-	const a = geo.index.getX( triOffset );
-	const b = geo.index.getX( triOffset + 1 );
-	const c = geo.index.getX( triOffset + 2 );
+	// [RM] updated intersection index getter to account for indirect triangle buffer
+	const bvh = geo.boundsTree
+	const triOffset = tri * 3
+	let a, b, c
+	if (bvh.indirectTriangleBuffer != null) {
+		const mappedTriOffset = bvh.indirectTriangleBuffer[triOffset]
+		a = geo.index.getX( mappedTriOffset )
+		b = geo.index.getX( mappedTriOffset + 1 );
+		c = geo.index.getX( mappedTriOffset + 2 );
+	} else {
+		a = geo.index.getX( triOffset );
+		b = geo.index.getX( triOffset + 1 );
+		c = geo.index.getX( triOffset + 2 );
+	}
 
 	const intersection = checkBufferGeometryIntersection( ray, geo.attributes.position, geo.attributes.uv, a, b, c, side );
 
