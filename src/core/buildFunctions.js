@@ -11,8 +11,7 @@ function ensureIndex( geo, options ) {
 	if ( ! geo.index ) {
 
 		const vertexCount = geo.attributes.position.count;
-		// const BufferConstructor = options.useSharedArrayBuffer ? SharedArrayBuffer : ArrayBuffer;
-		const BufferConstructor = ArrayBuffer
+		const BufferConstructor = options.useSharedArrayBuffer ? SharedArrayBuffer : ArrayBuffer;
 		let index;
 		if ( vertexCount > 65535 ) {
 
@@ -706,8 +705,7 @@ export function buildPackedTree( geo, options, indirectTriangleBuffer = null ) {
 	let uint32Array;
 	let uint16Array;
 	const packedRoots = [];
-	// const BufferConstructor = options.useSharedArrayBuffer ? SharedArrayBuffer : ArrayBuffer;
-	const BufferConstructor = ArrayBuffer
+	const BufferConstructor = options.useSharedArrayBuffer ? SharedArrayBuffer : ArrayBuffer;
 	for ( let i = 0; i < roots.length; i ++ ) {
 
 		const root = roots[ i ];

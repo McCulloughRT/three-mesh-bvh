@@ -138,11 +138,11 @@ export class MeshBVH {
 
 		}, options );
 
-		// if ( options.useSharedArrayBuffer && typeof SharedArrayBuffer === 'undefined' ) {
+		if ( options.useSharedArrayBuffer && typeof SharedArrayBuffer === 'undefined' ) {
 
-		// 	throw new Error( 'MeshBVH: SharedArrayBuffer is not available.' );
+			throw new Error( 'MeshBVH: SharedArrayBuffer is not available.' );
 
-		// }
+		}
 
 		// [RM] add indirectTriangleBuffer
 		this._indirectTriangleBuffer = null;
