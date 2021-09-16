@@ -130,6 +130,7 @@ export class MeshBVH {
 			verbose: true,
 			useSharedArrayBuffer: false,
 			setBoundingBox: true,
+			indirectTriangleBuffer: false,
 
 			// undocumented options
 
